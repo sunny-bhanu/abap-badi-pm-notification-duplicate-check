@@ -1,5 +1,7 @@
 "! <p class="shorttext synchronized">IW21/IW22: block duplicate breakdown notifications</p>
-"! Implementation of BAdI NOTIF_EVENT_SAVE, method CHANGE_DATA_AT_SAVE.
+"! Implementation of classic BAdI NOTIF_EVENT_SAVE, method CHANGE_DATA_AT_SAVE.
+"! Filter value of the implementation: QMART = M2. The QMART check in the
+"! code is kept as a second guard in case the filter is widened later.
 "!
 "! Rule: for notification type M2 (breakdown) a second OPEN notification
 "! for the same equipment / functional location must not be saved while
@@ -39,16 +41,16 @@ CLASS zcl_im_notif_dup_check IMPLEMENTATION.
 
   METHOD if_ex_notif_event_save~change_data_at_save.
     " Filter: only the notification type the rule is defined for
-    IF is_viqmel-qmart <> gc_notif_type_bd.
+    IF cs_viqmel-qmart <> gc_notif_type_bd.
       RETURN.
     ENDIF.
 
     " Nothing to compare against
-    IF is_viqmel-equnr IS INITIAL AND is_viqmel-tplnr IS INITIAL.
+    IF cs_viqmel-equnr IS INITIAL AND cs_viqmel-tplnr IS INITIAL.
       RETURN.
     ENDIF.
 
-    DATA(lv_dup) = find_open_duplicate( is_viqmel ).
+    DATA(lv_dup) = find_open_duplicate( cs_viqmel ).
     IF lv_dup IS INITIAL.
       RETURN.
     ENDIF.
@@ -56,12 +58,12 @@ CLASS zcl_im_notif_dup_check IMPLEMENTATION.
     " Block the save via the BAdI protocol
     ev_subrc = 4.
     ev_msgid = gc_msg_class.
-    ev_msgty = 'E'.
+    ev_msgtype = 'E'.
     ev_msgno = gc_msg_no_dup.
     ev_msgv1 = |{ lv_dup ALPHA = OUT }|.
-    ev_msgv2 = COND #( WHEN is_viqmel-equnr IS NOT INITIAL
-                       THEN |{ is_viqmel-equnr ALPHA = OUT }|
-                       ELSE is_viqmel-tplnr ).
+    ev_msgv2 = COND #( WHEN cs_viqmel-equnr IS NOT INITIAL
+                       THEN |{ cs_viqmel-equnr ALPHA = OUT }|
+                       ELSE cs_viqmel-tplnr ).
     " Message ZPM 001: 'Open breakdown notification &1 already exists for &2'
   ENDMETHOD.
 

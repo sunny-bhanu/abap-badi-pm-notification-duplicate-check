@@ -10,11 +10,11 @@ Maintenance planners were raising a second *breakdown* notification for an equip
 
 | Decision | Choice | Reason |
 |---|---|---|
-| Hook | BAdI `NOTIF_EVENT_SAVE`, method `CHANGE_DATA_AT_SAVE` | Fires once with the complete header (`IS_VIQMEL`) just before the database update, for create *and* change. Upgrade-safe - no user exit `QQMA0014` needed. |
-| Filter | `IS_VIQMEL-QMART = 'M2'` as the very first statement | The BAdI fires for every notification type; the rule must cost nothing for the others. |
+| Hook | BAdI `NOTIF_EVENT_SAVE`, method `CHANGE_DATA_AT_SAVE` | Fires once with the complete header (`CS_VIQMEL`) just before the database update, for create *and* change. Upgrade-safe - no user exit `QQMA0014` needed. |
+| Filter | Filter value `QMART = M2` on the implementation, plus the same check as the first statement | The BAdI is filter-dependent; the code check keeps the rule cheap and correct if the filter is ever widened. |
 | "Open" definition | **No active `NOCO` (`I0072`) status in `JEST`** - i.e. `JEST-INACT = ' '` is respected | Status rows are never deleted; a completed-then-reopened notification has an *inactive* NOCO row and must count as open again. |
-| Exclude self | `QMNUM <> IS_VIQMEL-QMNUM` | In IW22 the notification being changed would otherwise find itself. |
-| Blocking | `EV_SUBRC = 4` + `EV_MSGID/TY/NO/V1..V4` | The framework shows the error and keeps the user in the transaction. An inline `MESSAGE … TYPE 'E'` inside a BAdI would dump or behave differently in background / BAPI contexts. |
+| Exclude self | `QMNUM <> CS_VIQMEL-QMNUM` | In IW22 the notification being changed would otherwise find itself. |
+| Blocking | `EV_SUBRC = 4` + `EV_MSGID / EV_MSGTYPE / EV_MSGNO / EV_MSGV1..V4` | The framework shows the error and keeps the user in the transaction. An inline `MESSAGE … TYPE 'E'` inside a BAdI would dump or behave differently in background / BAPI contexts. |
 | Message | Custom message class `ZPM 001` | *"Open breakdown notification &1 already exists for &2"* - translatable and reusable from other checks. |
 
 See [`zcl_im_notif_dup_check.clas.abap`](zcl_im_notif_dup_check.clas.abap).
@@ -35,9 +35,22 @@ See [`zcl_im_notif_dup_check.clas.abap`](zcl_im_notif_dup_check.clas.abap).
 | UT-06 | Change existing open M2 in IW22 | Saved - self excluded |
 | UT-07 | No equipment, functional location only, open M2 on same FL | Blocked |
 
+## Delivered vs this version
+
+The first version I delivered on a project used the same BAdI, filter and message protocol. This repo is the version I would build today.
+
+| Topic | First delivered version | This version | Why it changed |
+|---|---|---|---|
+| Candidate notifications | `SELECT SINGLE`: one other M2 notification of the equipment | All other M2 notifications of the object | With several M2 notifications, `SELECT SINGLE` can return a completed one while an open one exists, and the duplicate gets through |
+| Open or completed | `SELECT SINGLE stat FROM jest ... inact = space`, compared with `I0072` | One read of the active `I0072` rows for the whole candidate set; open = no active `I0072` row | A notification has several active statuses at the same time, so a single row is an arbitrary one and the result depended on the database |
+| Object | Equipment only | Equipment, or functional location when no equipment is given | Also covers breakdowns raised on a functional location |
+| Message | Message number 001 with the equipment in `&1` | `ZPM 001` with the open notification in `&1` and the object in `&2` | The planner sees which notification to complete first |
+
 ## Activation
 
-SE19 → new BAdI (enhancement spot `BADI_NOTIF_EVENT_SAVE`) or classic BAdI `NOTIF_EVENT_SAVE` depending on release → implementing class from this repo → activate. No configuration change required.
+SE19 → classic BAdI `NOTIF_EVENT_SAVE` → new implementation with filter value `QMART = M2` → implementing class from this repo → activate. No configuration change required.
+
+Check SAP Note 978331 on your release for how the notification framework presents messages returned by this BAdI, and run UT-02 to confirm that the save is blocked.
 
 ---
-*Written as generic reference material. No client data or client-specific logic.* MIT License - see [LICENSE](LICENSE).
+*Written as generic reference material. No client data or client-specific logic.* MIT License, see [LICENSE](LICENSE).
